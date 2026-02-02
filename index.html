@@ -3,102 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Attendance Ledger</title>
+    <title>Eber's Attendance Optimizer</title>
     <style>
-        :root { --primary: #2563eb; --bg: #f1f5f9; --card: #ffffff; --text: #1e293b; }
-        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
-        .container { max-width: 1000px; margin: auto; }
-        .grid { display: grid; grid-template-columns: 1fr 350px; gap: 20px; }
-        .card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        :root { --primary: #2563eb; --working: #dcfce7; --holiday: #fee2e2; --bg: #f8fafc; --text: #1e293b; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; margin: 0; }
+        .container { max-width: 1100px; margin: auto; }
         .no-print { display: block; }
+        .grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; }
+        @media (max-width: 850px) { .grid { grid-template-columns: 1fr; } }
+
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; }
         
         /* Form & UI */
-        input, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
-        button { background: var(--primary); color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: opacity 0.2s; }
-        button:hover { opacity: 0.9; }
+        input, textarea, select { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        button { background: var(--primary); color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
         .btn-sec { background: #64748b; }
         .btn-danger { background: #ef4444; }
         
-        /* Lists */
-        .holiday-tag { display: inline-block; background: #dfe7ef; padding: 2px 8px; border-radius: 4px; margin: 2px; font-size: 0.85em; }
-        .event-item { border-bottom: 1px solid #e2e8f0; padding: 15px 0; position: relative; }
-        .preview-img { max-width: 100px; border-radius: 4px; margin-top: 10px; display: block; cursor: pointer; }
+        /* Calendar UI */
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+        .cal-day { padding: 10px 0; border-radius: 6px; font-size: 0.85em; cursor: pointer; border: 1px solid #e2e8f0; font-weight: 500; transition: transform 0.1s; }
+        .cal-day:hover { transform: scale(1.05); }
+        .day-label { font-weight: bold; padding-bottom: 5px; font-size: 0.75em; color: #64748b; }
 
-        /* Print Template */
-        #letter-output { display: none; padding: 50px; background: white; color: black; }
+        /* Event History */
+        .event-item { border-left: 5px solid var(--primary); padding: 15px; margin: 15px 0; background: #fdfdfd; border-radius: 0 8px 8px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .preview-img { max-width: 120px; margin-top: 10px; border-radius: 4px; border: 1px solid #ddd; }
+
+        /* Print Settings */
+        #letter-output { display: none; padding: 60px; line-height: 1.6; }
         @media print {
             .no-print { display: none !important; }
-            #letter-output { display: block !important; }
+            #letter-output { display: block !important; background: white; }
         }
     </style>
 </head>
 <body>
 
 <div class="container no-print">
-    <header style="display:flex; justify-content:space-between; align-items:center;">
-        <h2>📊 Attendance Optimizer</h2>
+    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+        <h2>Attendance Ledger</h2>
         <div>
-            <button onclick="exportFullData()">💾 Backup (JSON)</button>
+            <button onclick="exportJSON()">💾 Backup</button>
             <button class="btn-sec" onclick="document.getElementById('imp').click()">📂 Restore</button>
-            <input type="file" id="imp" hidden onchange="importFullData(event)">
+            <input type="file" id="imp" hidden onchange="importJSON(event)">
         </div>
     </header>
 
     <div class="grid">
-        <div class="card">
-            <h3 id="formTitle">Log New Event</h3>
-            <input type="hidden" id="editId">
-            <input type="text" id="title" placeholder="Event Name (e.g. Beach Hack 2026)">
-            <div style="display:flex; gap:10px;">
-                <input type="date" id="start">
-                <input type="date" id="end">
+        <section>
+            <div class="card">
+                <h3 id="formTitle">Log New Event</h3>
+                <input type="hidden" id="editId">
+                <input type="text" id="title" placeholder="Event Name">
+                <div style="display:flex; gap:10px;">
+                    <input type="date" id="start">
+                    <input type="date" id="end">
+                </div>
+                <textarea id="impact" rows="2" placeholder="Impact (e.g., Won 1st Place, Built QR system)"></textarea>
+                <label style="font-size: 0.8em; color: #64748b;">Proof / Certificate (Stored in Backup):</label>
+                <input type="file" id="photo" accept="image/*">
+                
+                <div id="editActions" style="display:none; gap:10px;">
+                    <button onclick="saveEvent(true)" style="flex:1">Update Event</button>
+                    <button class="btn-sec" onclick="resetForm()">Cancel</button>
+                </div>
+                <button id="addBtn" onclick="saveEvent(false)" style="width:100%">Add Event to Ledger</button>
             </div>
-            <textarea id="impact" rows="2" placeholder="Describe impact (Won 1st, Lead Organizer...)"></textarea>
-            <label style="font-size: 0.8em; color: #64748b;">Attach Proof (Photo/Certificate):</label>
-            <input type="file" id="photo" accept="image/*">
-            <div id="editActions" style="display:none; gap:10px;">
-                <button onclick="saveEvent(true)">Update Entry</button>
-                <button class="btn-sec" onclick="cancelEdit()">Cancel</button>
+
+            <div class="card">
+                <h3>Event History</h3>
+                <div id="eventList"></div>
             </div>
-            <button id="addBtn" onclick="saveEvent(false)">Save to Ledger</button>
+        </section>
 
-            <hr style="margin: 30px 0; opacity: 0.2;">
-            <h3>Event History</h3>
-            <div id="eventList"></div>
-        </div>
-
-        <div class="card">
-            <h3>College Holidays</h3>
-            <p style="font-size: 0.8em; color: #64748b;">Dates added here are ignored in Duty Leave letters.</p>
-            <input type="date" id="holidayDate">
-            <button class="btn-sec" style="width:100%" onclick="addHoliday()">Add Holiday</button>
-            <div id="holidayList" style="margin-top:15px;"></div>
-        </div>
+        <aside>
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <button class="btn-sec" onclick="changeMonth(-1)">◀</button>
+                    <strong id="monthDisplay"></strong>
+                    <button class="btn-sec" onclick="changeMonth(1)">▶</button>
+                </div>
+                <div class="cal-grid" id="calendarHeader"></div>
+                <div class="cal-grid" id="calendarBody" style="margin-top:5px;"></div>
+                <div style="margin-top:15px; font-size: 0.75em;">
+                    <span style="color: #16a34a;">● Green</span>: Working Day | 
+                    <span style="color: #dc2626;">● Red</span>: Holiday/Weekend
+                </div>
+            </div>
+        </aside>
     </div>
 </div>
 
 <div id="letter-output">
-    <p style="text-align: right;">Date: <span id="lDate"></span></p>
-    <p>To,<br>The Head of Department,<br>Computer Science Department.</p>
-    <p><b>Subject: Duty Leave Request - <span id="lEvent"></span></b></p>
-    <p>Respected Sir/Madam,</p>
-    <p>I, <b>Eber Johns C D</b>, request duty leave for the following working days due to my participation in the aforementioned event:</p>
-    <ul id="lDays"></ul>
-    <p>I have attached the necessary proof of participation for your kind perusal.</p>
+    <div style="text-align: right;"><span id="lDate"></span></div>
     <br><br>
-    <p>Yours faithfully,<br>Eber Johns C D</p>
+    <div>To,<br>The Head of Department,<br>Computer Science Department,<br>St. Thomas College (Autonomous), Thrissur.</div>
+    <br>
+    <p><b>Subject: Request for Duty Leave regarding Participation in <span id="lEventName"></span>.</b></p>
+    <p>Respected Sir/Madam,</p>
+    <p>I, <b>Eber Johns C D</b>, a student of B.Sc Computer Science, am writing to inform you that I have participated in/volunteered for the event <b>"<span id="lEventName2"></span>"</b>.</p>
+    <p>I request you to kindly grant me duty leave for the following working days:</p>
+    <ul id="lDays"></ul>
+    <p>The necessary proof of participation is attached for your reference.</p>
+    <br><br>
+    <div>Yours faithfully,<br>Eber Johns C D</div>
 </div>
 
 <script>
-    let appData = JSON.parse(localStorage.getItem('attendance_v2')) || { events: [], holidays: [] };
+    let appData = JSON.parse(localStorage.getItem('attendance_v4')) || { events: [], overrides: {} };
+    let curDate = new Date();
 
     async function saveEvent(isEdit) {
         const title = document.getElementById('title').value;
-        const photoFile = document.getElementById('photo').files[0];
-        let photoBase64 = isEdit ? appData.events.find(e => e.id == document.getElementById('editId').value).photo : "";
+        if (!title) return alert("Title required");
 
-        if (photoFile) {
-            photoBase64 = await toBase64(photoFile);
+        let photoBase64 = "";
+        const file = document.getElementById('photo').files[0];
+        if (file) {
+            photoBase64 = await toBase64(file);
+        } else if (isEdit) {
+            photoBase64 = appData.events.find(e => e.id == document.getElementById('editId').value).photo;
         }
 
         const entry = {
@@ -111,122 +136,139 @@
         };
 
         if (isEdit) {
-            const index = appData.events.findIndex(e => e.id === entry.id);
-            appData.events[index] = entry;
+            const idx = appData.events.findIndex(e => e.id === entry.id);
+            appData.events[idx] = entry;
         } else {
             appData.events.push(entry);
         }
-
         sync();
-        cancelEdit();
-        clearForm();
+        resetForm();
     }
 
     const toBase64 = file => new Promise((res, rej) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = () => res(reader.result);
-        reader.onerror = error => rej(error);
+        reader.onerror = e => rej(e);
     });
 
-    function addHoliday() {
-        const h = document.getElementById('holidayDate').value;
-        if(h && !appData.holidays.includes(h)) {
-            appData.holidays.push(h);
-            sync();
-        }
-    }
-
-    function removeHoliday(date) {
-        appData.holidays = appData.holidays.filter(d => d !== date);
+    function toggleDate(dateStr) {
+        const d = new Date(dateStr);
+        const isWE = (d.getDay() === 0 || d.getDay() === 6);
+        const def = isWE ? 'holiday' : 'working';
+        const cur = appData.overrides[dateStr] || def;
+        appData.overrides[dateStr] = (cur === 'working' ? 'holiday' : 'working');
+        if (appData.overrides[dateStr] === def) delete appData.overrides[dateStr];
         sync();
     }
 
-    function editEvent(id) {
+    function renderCalendar() {
+        const head = document.getElementById('calendarHeader');
+        const body = document.getElementById('calendarBody');
+        const disp = document.getElementById('monthDisplay');
+        head.innerHTML = ['S','M','T','W','T','F','S'].map(d => `<div class="day-label">${d}</div>`).join('');
+        body.innerHTML = "";
+        
+        const year = curDate.getFullYear();
+        const month = curDate.getMonth();
+        disp.innerText = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(curDate);
+
+        const first = new Date(year, month, 1).getDay();
+        const total = new Date(year, month + 1, 0).getDate();
+
+        for (let i = 0; i < first; i++) body.innerHTML += `<div></div>`;
+
+        for (let d = 1; d <= total; d++) {
+            const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const isWE = (new Date(year, month, d).getDay() === 0 || new Date(year, month, d).getDay() === 6);
+            const status = appData.overrides[dateStr] || (isWE ? 'holiday' : 'working');
+            
+            body.innerHTML += `<div class="cal-day" onclick="toggleDate('${dateStr}')" 
+                style="background:${status === 'holiday' ? 'var(--holiday)' : 'var(--working)'}; 
+                       color:${status === 'holiday' ? '#dc2626' : '#16a34a'};">
+                ${d}</div>`;
+        }
+    }
+
+    function getPrintable(start, end) {
+        let res = [];
+        let c = new Date(start);
+        let l = new Date(end);
+        while (c <= l) {
+            const s = c.toISOString().split('T')[0];
+            const isWE = (c.getDay() === 0 || c.getDay() === 6);
+            if ((appData.overrides[s] || (isWE ? 'holiday' : 'working')) === 'working') res.push(c.toDateString());
+            c.setDate(c.getDate() + 1);
+        }
+        return res;
+    }
+
+    function printL(id) {
+        const ev = appData.events.find(e => e.id === id);
+        const days = getPrintable(ev.start, ev.end);
+        document.getElementById('lDate').innerText = new Date().toLocaleDateString();
+        document.getElementById('lEventName').innerText = ev.title;
+        document.getElementById('lEventName2').innerText = ev.title;
+        document.getElementById('lDays').innerHTML = days.map(d => `<li>${d}</li>`).join('');
+        window.print();
+    }
+
+    function sync() {
+        localStorage.setItem('attendance_v4', JSON.stringify(appData));
+        render();
+        renderCalendar();
+    }
+
+    function render() {
+        document.getElementById('eventList').innerHTML = appData.events.slice().reverse().map(ev => `
+            <div class="event-item">
+                <div style="float:right">
+                    <button class="btn-sec" style="padding:4px 8px" onclick="editEv(${ev.id})">Edit</button>
+                    <button class="btn-danger" style="padding:4px 8px" onclick="delEv(${ev.id})">Del</button>
+                </div>
+                <strong>${ev.title}</strong><br>
+                <small>${ev.start} to ${ev.end}</small>
+                <p style="margin:8px 0; font-size:0.9em">${ev.impact}</p>
+                ${ev.photo ? `<img src="${ev.photo}" class="preview-img" onclick="window.open(this.src)">` : ''}
+                <button style="margin-top:10px; width:100%" onclick="printL(${ev.id})">Generate Letter</button>
+            </div>
+        `).join('');
+    }
+
+    function editEv(id) {
         const ev = appData.events.find(e => e.id === id);
         document.getElementById('editId').value = ev.id;
         document.getElementById('title').value = ev.title;
         document.getElementById('start').value = ev.start;
         document.getElementById('end').value = ev.end;
         document.getElementById('impact').value = ev.impact;
-        
-        document.getElementById('formTitle').innerText = "Editing Event...";
+        document.getElementById('formTitle').innerText = "Edit Event Mode";
         document.getElementById('editActions').style.display = "flex";
         document.getElementById('addBtn').style.display = "none";
     }
 
-    function cancelEdit() {
+    function resetForm() {
+        ['title','start','end','impact','photo','editId'].forEach(k => document.getElementById(k).value = "");
         document.getElementById('formTitle').innerText = "Log New Event";
         document.getElementById('editActions').style.display = "none";
         document.getElementById('addBtn').style.display = "block";
-        clearForm();
     }
 
-    function getPrintableDays(start, end) {
-        let days = [];
-        let curr = new Date(start);
-        let last = new Date(end);
-        while (curr <= last) {
-            let iso = curr.toISOString().split('T')[0];
-            if (curr.getDay() !== 0 && curr.getDay() !== 6 && !appData.holidays.includes(iso)) {
-                days.push(curr.toDateString());
-            }
-            curr.setDate(curr.getDate() + 1);
-        }
-        return days;
+    function delEv(id) { if(confirm("Delete entry?")) { appData.events = appData.events.filter(e => e.id !== id); sync(); } }
+    function changeMonth(d) { curDate.setMonth(curDate.getMonth() + d); renderCalendar(); }
+    function exportJSON() {
+        const blob = new Blob([JSON.stringify(appData)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'my_attendance_data.json'; a.click();
     }
-
-    function printLetter(id) {
-        const ev = appData.events.find(e => e.id === id);
-        const days = getPrintableDays(ev.start, ev.end);
-        document.getElementById('lDate').innerText = new Date().toLocaleDateString();
-        document.getElementById('lEvent').innerText = ev.title;
-        document.getElementById('lDays').innerHTML = days.map(d => `<li>${d}</li>`).join('');
-        window.print();
-    }
-
-    function sync() {
-        localStorage.setItem('attendance_v2', JSON.stringify(appData));
-        render();
-    }
-
-    function render() {
-        // Render Events
-        document.getElementById('eventList').innerHTML = appData.events.map(ev => `
-            <div class="event-item">
-                <div style="display:flex; justify-content:space-between;">
-                    <strong>${ev.title}</strong>
-                    <div>
-                        <button class="btn-sec" style="padding:2px 8px;" onclick="editEvent(${ev.id})">Edit</button>
-                        <button class="btn-danger" style="padding:2px 8px;" onclick="deleteEvent(${ev.id})">Delete</button>
-                    </div>
-                </div>
-                <small>${ev.start} to ${ev.end}</small><br>
-                <p style="margin:5px 0; font-size:0.9em;">${ev.impact}</p>
-                ${ev.photo ? `<img src="${ev.photo}" class="preview-img" onclick="window.open(this.src)">` : ''}
-                <button style="margin-top:10px; font-size:0.8em;" onclick="printLetter(${ev.id})">🖨️ Generate Letter</button>
-            </div>
-        `).join('');
-
-        // Render Holidays
-        document.getElementById('holidayList').innerHTML = appData.holidays.sort().map(h => `
-            <span class="holiday-tag">${h} <b style="cursor:pointer" onclick="removeHoliday('${h}')">×</b></span>
-        `).join('');
-    }
-
-    function deleteEvent(id) { if(confirm('Delete this record?')) { appData.events = appData.events.filter(e => e.id !== id); sync(); } }
-    function clearForm() { ['title','start','end','impact','photo','editId'].forEach(id => document.getElementById(id).value = ''); }
-    function exportFullData() {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData));
-        const dl = document.createElement('a'); dl.setAttribute("href", dataStr); dl.setAttribute("download", "attendance_v2_backup.json"); dl.click();
-    }
-    function importFullData(e) {
+    function importJSON(e) {
         const reader = new FileReader();
-        reader.onload = (ev) => { appData = JSON.parse(ev.target.result); sync(); };
+        reader.onload = x => { appData = JSON.parse(x.target.result); sync(); };
         reader.readAsText(e.target.files[0]);
     }
 
     render();
+    renderCalendar();
 </script>
 </body>
 </html>
