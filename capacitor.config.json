@@ -1,0 +1,8 @@
+{
+  "appId": "com.eber.attendance",
+  "appName": "Attendance",
+  "webDir": "www",
+  "server": {
+    "allowNavigation": ["*"]
+  }
+}

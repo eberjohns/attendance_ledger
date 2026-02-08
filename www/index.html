@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Command Center</title>
+    <style>
+        :root { --primary: #2563eb; --working: #dcfce7; --holiday: #fee2e2; --bg: #f8fafc; --text: #1e293b; --accent: #8b5cf6; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; }
+        .container { max-width: 1200px; margin: auto; padding-bottom: 50px; }
+        .no-print { display: block; }
+        .grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; }
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, textarea, select { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { background: var(--primary); color: white; border: none; padding: 12px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .btn-sec { background: #64748b; }
+        .btn-danger { background: #ef4444; }
+
+        /* Calendar Markers */
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
+        .cal-day { padding: 15px 0; border-radius: 8px; cursor: pointer; position: relative; border: 1px solid #e2e8f0; font-weight: 600; }
+        .dot-container { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; }
+        .dot { width: 5px; height: 5px; border-radius: 50%; }
+        .dot.history { background: var(--primary); }
+        .dot.lookout { background: var(--accent); }
+
+        /* Slider & Overlay */
+        #eventSliderOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 23, 42, 0.98); z-index:1000; flex-direction:column; align-items:center; justify-content:center; color: white; }
+        .slider-wrapper { width: 95%; max-width: 420px; overflow-x: auto; display: flex; scroll-snap-type: x mandatory; gap: 15px; padding: 20px 0; scrollbar-width: none; }
+        .slider-card { flex: 0 0 100%; scroll-snap-align: center; background: #1e293b; border-radius: 16px; padding: 20px; box-sizing: border-box; border: 1px solid #334155; }
+        .slider-card img { width: 100%; border-radius: 10px; margin-bottom: 15px; max-height: 220px; object-fit: cover; }
+        
+        /* Image Viewer */
+        #imageViewer { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:2000; align-items:center; justify-content:center; }
+        #imageViewer img { max-width:100%; max-height:100%; object-fit: contain; }
+
+        /* Modals */
+        #profileModal, #addLookoutModal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:1100; align-items:center; justify-content:center; }
+        .modal-content { background:white; padding:25px; border-radius:16px; width:90%; max-width:450px; color: var(--text); max-height: 90vh; overflow-y: auto; }
+
+        #letter-output { display: none; padding: 60px; line-height: 1.6; font-family: 'Times New Roman', serif; }
+        @media print { .no-print { display: none !important; } #letter-output { display: block !important; } }
+    </style>
+    <script src="https://unpkg.com/@capacitor/core@latest/dist/capacitor.js"></script>
+    <script src="https://unpkg.com/@capacitor/filesystem@latest/dist/filesystem.js"></script>
+</head>
+<body>
+
+<div class="container no-print">
+    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+        <h2 style="font-size: 1.2em;">Attendance Command</h2>
+        <div style="display:flex; gap:8px;">
+            <button class="btn-sec" style="padding: 8px 12px;" onclick="openProfile()">👤</button>
+            <button style="padding: 8px 12px;" onclick="exportJSON()">💾</button>
+            <button class="btn-sec" style="padding: 8px 12px;" onclick="document.getElementById('imp').click()">📂</button>
+            <input type="file" id="imp" hidden onchange="importJSON(event)">
+        </div>
+    </header>
+
+    <div class="grid">
+        <section>
+            <div class="card">
+                <h3 id="formTitle" style="margin-top:0;">Log Past Event</h3>
+                <input type="hidden" id="editId">
+                <input type="text" id="title" placeholder="Event Name">
+                <div style="display:flex; gap:10px;"><input type="date" id="start"><input type="date" id="end"></div>
+                <textarea id="impact" rows="2" placeholder="Impact/Achievement"></textarea>
+                <input type="file" id="photo" accept="image/*">
+                <div id="editActions" style="display:none; gap:10px;">
+                    <button onclick="saveEvent(true)" style="flex:1">Update</button>
+                    <button class="btn-sec" onclick="resetForm()">Cancel</button>
+                </div>
+                <button id="addBtn" onclick="saveEvent(false)" style="width:100%">Add to Ledger</button>
+            </div>
+            <div id="eventList"></div>
+        </section>
+
+        <aside>
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <button onclick="changeMonth(-1)">◀</button>
+                    <strong id="monthDisplay"></strong>
+                    <button onclick="changeMonth(1)">▶</button>
+                </div>
+                <div class="cal-grid" id="calendarHeader"></div>
+                <div class="cal-grid" id="calendarBody" style="margin-top:5px;"></div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<div id="eventSliderOverlay">
+    <div style="width:95%; max-width:420px; display:flex; justify-content:space-between; padding:10px;">
+        <h3 id="sliderDateTitle">Date</h3>
+        <button onclick="closeSlider()" style="background:none; color:white; font-size:28px;">✕</button>
+    </div>
+    <div class="slider-wrapper" id="sliderItems"></div>
+    <div style="width:90%; max-width:400px; margin-top:10px; display:flex; gap:10px;">
+        <button onclick="openAddLookout()" style="flex:1; background:var(--accent);">+ Schedule Event</button>
+        <button onclick="toggleHolidayFromSlider()" class="btn-sec">Toggle Holiday</button>
+    </div>
+</div>
+
+<div id="imageViewer" onclick="this.style.display='none'">
+    <img id="viewerImg" src="">
+</div>
+
+<div id="profileModal"><div class="modal-content" id="profContent"></div></div>
+<div id="addLookoutModal"><div class="modal-content" id="lookContent"></div></div>
+
+<div id="letter-output">
+    <div style="text-align: right;"><span id="lDate"></span></div><br>
+    <div>To,<br><span id="outHod"></span>,<br><span id="outDept"></span>,<br><span id="outColl"></span>.</div><br>
+    <p>Respected Sir/Madam, I <b><span id="outName"></span></b> request duty leave for: </p>
+    <ul id="lDays"></ul><br><div>Yours faithfully, <b id="outName2"></b></div>
+</div>
+
+<script>
+    const { Filesystem } = Capacitor.Plugins;
+    const { Directory } = Capacitor.Plugins.Filesystem;
+    const DATA_FILE = 'eber_attendance_v7.json';
+
+    let appData = { events: [], lookouts: [], overrides: {}, profile: {name:"", college:"", dept:"", hod:""} };
+    let curDate = new Date();
+    let selectedISO = "";
+    let editingLookoutId = null;
+
+    async function sync() {
+        try {
+            await Filesystem.writeFile({ path: DATA_FILE, data: JSON.stringify(appData), directory: Directory.Data, encoding: 'utf8' });
+        } catch (e) { localStorage.setItem('att_v7', JSON.stringify(appData)); }
+        renderAll();
+    }
+
+    async function loadData() {
+        try {
+            const res = await Filesystem.readFile({ path: DATA_FILE, directory: Directory.Data, encoding: 'utf8' });
+            appData = JSON.parse(res.data);
+        } catch (e) { 
+            const local = localStorage.getItem('att_v7');
+            if(local) appData = JSON.parse(local);
+        }
+        renderAll();
+    }
+
+    function renderAll() { renderHistory(); renderCalendar(); }
+
+    function renderCalendar() {
+        const body = document.getElementById('calendarBody');
+        const head = document.getElementById('calendarHeader');
+        head.innerHTML = ['S','M','T','W','T','F','S'].map(d => `<div style="font-size:0.7em;font-weight:bold;color:#64748b">${d}</div>`).join('');
+        body.innerHTML = "";
+        const y = curDate.getFullYear(), m = curDate.getMonth();
+        document.getElementById('monthDisplay').innerText = new Intl.DateTimeFormat('en-US', {month:'long', year:'numeric'}).format(curDate);
+        const first = new Date(y, m, 1).getDay(), total = new Date(y, m+1, 0).getDate();
+        for (let i=0; i<first; i++) body.innerHTML += `<div></div>`;
+        for (let d=1; d<=total; d++) {
+            const s = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const isWE = (new Date(y, m, d).getDay() === 0 || new Date(y, m, d).getDay() === 6);
+            const status = appData.overrides[s] || (isWE ? 'holiday' : 'working');
+            const hasHistory = appData.events.some(e => s >= e.start && s <= e.end);
+            const hasLookout = appData.lookouts.some(e => e.date === s);
+            body.innerHTML += `
+                <div class="cal-day" onclick="openDay('${s}')" style="background:${status==='holiday'?'#fee2e2':'#dcfce7'}; color:${status==='holiday'?'#dc2626':'#16a34a'}">
+                    ${d}
+                    <div class="dot-container">
+                        ${hasHistory ? '<div class="dot history"></div>' : ''}
+                        ${hasLookout ? '<div class="dot lookout"></div>' : ''}
+                    </div>
+                </div>`;
+        }
+    }
+
+    function openDay(iso) {
+        selectedISO = iso;
+        document.getElementById('sliderDateTitle').innerText = new Date(iso).toDateString();
+        document.getElementById('eventSliderOverlay').style.display = "flex";
+        renderSlider();
+    }
+
+    function viewImg(src) {
+        document.getElementById('viewerImg').src = src;
+        document.getElementById('imageViewer').style.display = "flex";
+    }
+
+    function renderSlider() {
+        const wrapper = document.getElementById('sliderItems');
+        const dayLookouts = appData.lookouts.filter(e => e.date === selectedISO);
+        if(dayLookouts.length === 0) { wrapper.innerHTML = `<div class="slider-card" style="text-align:center;">No events found.</div>`; return; }
+
+        wrapper.innerHTML = dayLookouts.map(e => `
+            <div class="slider-card">
+                ${e.poster ? `<img src="${e.poster}" onclick="viewImg('${e.poster}')">` : ''}
+                <h3 style="margin:0 0 5px 0;">${e.title}</h3>
+                <div style="font-size:0.8em; color:#94a3b8; margin-bottom:10px;">
+                    📍 ${e.venue} | 📅 ${e.duration} Days<br>
+                    💰 ${e.prize} | 🎟️ ${e.fee}
+                </div>
+                ${e.link ? `<a href="${e.link}" target="_blank" style="color:var(--accent); font-size:0.8em;">Registration Link 🔗</a>` : ''}
+                <p style="font-size:0.8em; height:60px; overflow-y:auto; color:#cbd5e1; margin-top:10px;">${e.desc}</p>
+                <div style="display:flex; gap:5px;">
+                    <button onclick="toggleGoing(${e.id})" style="flex:2; background:${e.going ? '#10b981' : '#475569'}">${e.going ? '✅ Going' : 'Mark'}</button>
+                    <button onclick="editLookout(${e.id})" class="btn-sec">Edit</button>
+                    <button onclick="delLookout(${e.id})" class="btn-danger">🗑️</button>
+                </div>
+            </div>`).join('');
+    }
+
+    async function saveLookout() {
+        const file = document.getElementById('limg').files[0];
+        let b64 = editingLookoutId ? appData.lookouts.find(x => x.id === editingLookoutId).poster : "";
+        if(file) b64 = await toBase64(file);
+
+        const data = {
+            id: editingLookoutId || Date.now(), date: selectedISO,
+            title: document.getElementById('lt').value, prize: document.getElementById('lp').value,
+            fee: document.getElementById('lf').value, team: document.getElementById('lts').value,
+            venue: document.getElementById('lv').value, duration: document.getElementById('ldur').value,
+            link: document.getElementById('ll').value, desc: document.getElementById('ld').value,
+            poster: b64, going: false
+        };
+
+        if(editingLookoutId) {
+            const idx = appData.lookouts.findIndex(x => x.id === editingLookoutId);
+            appData.lookouts[idx] = data;
+        } else { appData.lookouts.push(data); }
+        
+        editingLookoutId = null; sync(); closeLookout(); renderSlider();
+    }
+
+    function editLookout(id) {
+        editingLookoutId = id;
+        const e = appData.lookouts.find(x => x.id === id);
+        openAddLookout();
+        document.getElementById('lt').value = e.title; document.getElementById('lp').value = e.prize;
+        document.getElementById('lf').value = e.fee; document.getElementById('lts').value = e.team;
+        document.getElementById('lv').value = e.venue; document.getElementById('ldur').value = e.duration;
+        document.getElementById('ll').value = e.link; document.getElementById('ld').value = e.desc;
+    }
+
+    async function saveEvent(isEdit) {
+        const title = document.getElementById('title').value; if(!title) return;
+        const img = document.getElementById('photo').files[0];
+        let b64 = isEdit ? appData.events.find(e => e.id == document.getElementById('editId').value).photo : "";
+        if(img) b64 = await toBase64(img);
+        const ev = { id: isEdit ? parseInt(document.getElementById('editId').value) : Date.now(), title, start: document.getElementById('start').value, end: document.getElementById('end').value, impact: document.getElementById('impact').value, photo: b64 };
+        if(isEdit) { const i = appData.events.findIndex(e => e.id === ev.id); appData.events[i] = ev; }
+        else appData.events.push(ev);
+        sync(); resetForm();
+    }
+
+    function openAddLookout() {
+        document.getElementById('addLookoutModal').style.display = "flex";
+        document.getElementById('lookContent').innerHTML = `
+            <h3 style="margin-top:0;">Schedule Event</h3>
+            <input type="text" id="lt" placeholder="Event Title">
+            <div style="display:flex; gap:5px;">
+                <input type="text" id="lv" placeholder="Venue">
+                <input type="number" id="ldur" placeholder="Days">
+            </div>
+            <div style="display:flex; gap:5px;">
+                <input type="text" id="lp" placeholder="Prize">
+                <input type="text" id="lf" placeholder="Fee">
+            </div>
+            <input type="text" id="ll" placeholder="Registration Link">
+            <input type="text" id="lts" placeholder="Team Members">
+            <textarea id="ld" rows="2" placeholder="Description..."></textarea>
+            <input type="file" id="limg" accept="image/*">
+            <button onclick="saveLookout()" style="width:100%">Save Event</button>
+            <button onclick="closeLookout()" class="btn-sec" style="width:100%; margin-top:10px;">Cancel</button>
+        `;
+    }
+
+    const toBase64 = file => new Promise(res => { const r = new FileReader(); r.readAsDataURL(file); r.onload = () => res(r.result); });
+    function sync() { localStorage.setItem('att_v7', JSON.stringify(appData)); renderAll(); }
+    function changeMonth(d) { curDate.setMonth(curDate.getMonth() + d); renderCalendar(); }
+    function closeSlider() { document.getElementById('eventSliderOverlay').style.display = "none"; }
+    function closeLookout() { document.getElementById('addLookoutModal').style.display = "none"; editingLookoutId = null;}
+    function toggleGoing(id) { const e = appData.lookouts.find(x => x.id === id); e.going = !e.going; sync(); renderSlider(); }
+    function delLookout(id) { if(confirm("Remove?")) { appData.lookouts = appData.lookouts.filter(x => x.id !== id); sync(); renderSlider(); }}
+    function delEv(id) { if(confirm("Delete?")) { appData.events = appData.events.filter(x => x.id !== id); sync(); } }
+    function editEv(id) { 
+        const e = appData.events.find(x => x.id === id);
+        document.getElementById('editId').value = e.id; document.getElementById('title').value = e.title;
+        document.getElementById('start').value = e.start; document.getElementById('end').value = e.end;
+        document.getElementById('impact').value = e.impact; document.getElementById('formTitle').innerText = "Edit Mode";
+        document.getElementById('editActions').style.display = "flex"; document.getElementById('addBtn').style.display = "none";
+    }
+    function resetForm() { ['title','start','end','impact','photo','editId'].forEach(i => document.getElementById(i).value=""); document.getElementById('formTitle').innerText="Log Past Event"; document.getElementById('editActions').style.display="none"; document.getElementById('addBtn').style.display="block"; }
+    function renderHistory() {
+        document.getElementById('eventList').innerHTML = appData.events.slice().reverse().map(e => `
+            <div class="card" style="padding:15px; border-left:5px solid var(--primary);">
+                <div style="float:right"><button class="btn-sec" style="padding:4px 8px" onclick="editEv(${e.id})">✎</button></div>
+                <strong>${e.title}</strong><br><small>${e.start} to ${e.end}</small>
+                <button style="width:100%; margin-top:10px; font-size:0.8em;" onclick="printLetter(${e.id})">Generate Letter</button>
+            </div>`).join('');
+    }
+    function toggleHolidayFromSlider() {
+        const d = new Date(selectedISO); const isWE = (d.getDay() === 0 || d.getDay() === 6);
+        const def = isWE ? 'holiday' : 'working';
+        const cur = appData.overrides[selectedISO] || def;
+        appData.overrides[selectedISO] = (cur === 'working' ? 'holiday' : 'working');
+        if (appData.overrides[selectedISO] === def) delete appData.overrides[selectedISO];
+        sync(); closeSlider();
+    }
+    function openProfile() {
+        document.getElementById('profileModal').style.display = "flex";
+        document.getElementById('profContent').innerHTML = `
+            <h3 style="margin-top:0;">Profile</h3>
+            <input type="text" id="pn" value="${appData.profile.name}" placeholder="Name">
+            <input type="text" id="pc" value="${appData.profile.college}" placeholder="College">
+            <input type="text" id="pd" value="${appData.profile.dept}" placeholder="Department">
+            <input type="text" id="ph" value="${appData.profile.hod}" placeholder="HOD Title">
+            <button onclick="saveProf()" style="width:100%">Save</button>
+        `;
+    }
+    function saveProf() {
+        appData.profile = { name: document.getElementById('pn').value, college: document.getElementById('pc').value, dept: document.getElementById('pd').value, hod: document.getElementById('ph').value };
+        sync(); document.getElementById('profileModal').style.display = "none";
+    }
+    function exportJSON() {
+        const blob = new Blob([JSON.stringify(appData)], {type:'application/json'});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'attendance_backup.json'; a.click();
+    }
+    function importJSON(e) {
+        const r = new FileReader(); r.onload = x => { appData = JSON.parse(x.target.result); sync(); }; r.readAsText(e.target.files[0]);
+    }
+
+    window.onload = loadData;
+</script>
+</body>
+</html>
