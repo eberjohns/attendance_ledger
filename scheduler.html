@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eber's Optimizer - Planning Edition</title>
+    <style>
+        :root { --primary: #2563eb; --working: #dcfce7; --holiday: #fee2e2; --bg: #f8fafc; --text: #1e293b; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; }
+        .container { max-width: 1100px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        
+        /* Calendar Heatmap Improvements */
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+        .cal-day { padding: 15px 0; border-radius: 8px; text-align: center; cursor: pointer; position: relative; font-weight: 600; border: 1px solid #e2e8f0; }
+        .event-dot { width: 6px; height: 6px; background: var(--primary); border-radius: 50%; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); }
+
+        /* Instagram Style Slider */
+        #eventSliderOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:200; color:white; flex-direction:column; align-items:center; justify-content:center; }
+        .slider-container { display:flex; overflow-x: auto; width: 90%; max-width: 450px; scroll-snap-type: x mandatory; gap: 20px; padding: 20px 0; }
+        .slider-card { flex: 0 0 100%; scroll-snap-align: center; background: #1e293b; border-radius: 15px; padding: 15px; box-sizing: border-box; position: relative; }
+        .slider-card img { width: 100%; border-radius: 10px; margin-bottom: 10px; max-height: 300px; object-fit: contain; }
+        
+        /* Stats Badges */
+        .badge { background: var(--primary); padding: 4px 8px; border-radius: 4px; font-size: 0.7em; margin-right: 5px; }
+        .reg-fee { background: #ef4444; }
+        .prize { background: #10b981; }
+
+        input, textarea { width: 100%; padding: 10px; margin: 5px 0; border-radius: 6px; border: 1px solid #ddd; background: #fff; }
+        .no-print { display: block; }
+        @media print { .no-print { display: none !important; } }
+    </style>
+</head>
+<body>
+
+<div class="container no-print">
+    <header style="display:flex; justify-content:space-between; align-items:center;">
+        <h2>📅 Event Planner & Ledger</h2>
+        <div style="display:flex; gap:10px;">
+            <button onclick="openProfile()">👤 Profile</button>
+            <button onclick="exportJSON()">💾 Backup</button>
+            <button class="btn-sec" onclick="document.getElementById('imp').click()">📂 Restore</button>
+            <input type="file" id="imp" hidden onchange="importJSON(event)">
+        </div>
+    </header>
+
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <button onclick="changeMonth(-1)">◀</button>
+            <h3 id="monthDisplay"></h3>
+            <button onclick="changeMonth(1)">▶</button>
+        </div>
+        <div class="cal-grid" id="calendarHeader"></div>
+        <div class="cal-grid" id="calendarBody" style="margin-top:10px;"></div>
+    </div>
+</div>
+
+<div id="eventSliderOverlay">
+    <div style="width: 90%; max-width: 450px; display: flex; justify-content: space-between; align-items: center;">
+        <h3 id="selectedDateTitle">Date</h3>
+        <button onclick="closeSlider()" style="background:none; font-size: 24px;">✕</button>
+    </div>
+    
+    <div class="slider-container" id="sliderItems">
+        </div>
+
+    <div style="width: 90%; max-width: 450px; margin-top: 10px;">
+        <button onclick="showAddForm()" style="width: 100%; background: #475569;">+ Add Upcoming Event</button>
+    </div>
+</div>
+
+<div id="addEventModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:300; align-items:center; justify-content:center;">
+    <div class="card" style="width: 90%; max-width: 500px;">
+        <h3>Schedule New Lookout</h3>
+        <input type="text" id="lookTitle" placeholder="Event Title">
+        <input type="text" id="lookPrize" placeholder="Prize Pool (e.g. 50k)">
+        <input type="text" id="lookFee" placeholder="Reg Fee (e.g. 200/team)">
+        <input type="text" id="lookTeam" placeholder="Team Size (e.g. 3 members)">
+        <textarea id="lookDesc" rows="3" placeholder="Paste WhatsApp Description here..."></textarea>
+        <label>Upload Poster Image:</label>
+        <input type="file" id="lookPoster" accept="image/*">
+        <div style="display:flex; gap:10px; margin-top:10px;">
+            <button onclick="saveLookout()" style="flex:1">Save to Calendar</button>
+            <button onclick="hideAddForm()" class="btn-sec">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let appData = JSON.parse(localStorage.getItem('attendance_v6')) || { 
+        events: [], overrides: {}, profile: {}, lookouts: [] 
+    };
+    let curDate = new Date();
+    let selectedISO = "";
+
+    function renderCalendar() {
+        const body = document.getElementById('calendarBody');
+        const head = document.getElementById('calendarHeader');
+        head.innerHTML = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => `<div style="font-size:0.8em; color:#64748b; font-weight:bold;">${d}</div>`).join('');
+        body.innerHTML = "";
+        
+        const y = curDate.getFullYear(), m = curDate.getMonth();
+        document.getElementById('monthDisplay').innerText = new Intl.DateTimeFormat('en-US', {month:'long', year:'numeric'}).format(curDate);
+        
+        const first = new Date(y, m, 1).getDay(), total = new Date(y, m+1, 0).getDate();
+        for (let i=0; i<first; i++) body.innerHTML += `<div></div>`;
+
+        for (let d=1; d<=total; d++) {
+            const s = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const isWE = (new Date(y, m, d).getDay() === 0 || new Date(y, m, d).getDay() === 6);
+            const status = appData.overrides[s] || (isWE ? 'holiday' : 'working');
+            
+            // Check if there are lookout events for this day
+            const hasEvents = appData.lookouts.some(e => e.date === s);
+            
+            body.innerHTML += `
+                <div class="cal-day" onclick="openDay('${s}')" style="background:${status==='holiday'?'#fee2e2':'#dcfce7'}; color:${status==='holiday'?'#dc2626':'#16a34a'}">
+                    ${d}
+                    ${hasEvents ? '<div class="event-dot"></div>' : ''}
+                </div>`;
+        }
+    }
+
+    function openDay(iso) {
+        selectedISO = iso;
+        document.getElementById('selectedDateTitle').innerText = new Date(iso).toDateString();
+        document.getElementById('eventSliderOverlay').style.display = "flex";
+        renderSlider(iso);
+    }
+
+    function renderSlider(iso) {
+        const slider = document.getElementById('sliderItems');
+        const dayEvents = appData.lookouts.filter(e => e.date === iso);
+        
+        if (dayEvents.length === 0) {
+            slider.innerHTML = `<div class="slider-card" style="text-align:center; padding-top:50px;">No events scheduled for this day.</div>`;
+            return;
+        }
+
+        slider.innerHTML = dayEvents.map(e => `
+            <div class="slider-card">
+                ${e.poster ? `<img src="${e.poster}">` : ''}
+                <h4>${e.title}</h4>
+                <div>
+                    <span class="badge prize">🏆 ${e.prize}</span>
+                    <span class="badge reg-fee">💰 ${e.fee}</span>
+                    <span class="badge" style="background:#64748b">👥 ${e.team}</span>
+                </div>
+                <p style="font-size:0.8em; margin-top:10px; color:#cbd5e1; height:60px; overflow-y:auto;">${e.desc}</p>
+                <button onclick="toggleDecision(${e.id})" style="width:100%; background:${e.decided ? '#10b981' : '#475569'}">
+                    ${e.decided ? '✅ Going' : 'Mark as Going'}
+                </button>
+                <button onclick="deleteLookout(${e.id})" style="background:none; color:#ef4444; width:100%; font-size:0.7em; margin-top:5px;">Remove</button>
+            </div>
+        `).join('');
+    }
+
+    async function saveLookout() {
+        const posterFile = document.getElementById('lookPoster').files[0];
+        let posterBase64 = "";
+        if(posterFile) {
+            const r = new FileReader();
+            posterBase64 = await new Promise(res => { r.readAsDataURL(posterFile); r.onload = () => res(r.result); });
+        }
+
+        const newLookout = {
+            id: Date.now(),
+            date: selectedISO,
+            title: document.getElementById('lookTitle').value,
+            prize: document.getElementById('lookPrize').value,
+            fee: document.getElementById('lookFee').value,
+            team: document.getElementById('lookTeam').value,
+            desc: document.getElementById('lookDesc').value,
+            poster: posterBase64,
+            decided: false
+        };
+
+        appData.lookouts.push(newLookout);
+        sync();
+        hideAddForm();
+        renderSlider(selectedISO);
+    }
+
+    function toggleDecision(id) {
+        const ev = appData.lookouts.find(e => e.id === id);
+        ev.decided = !ev.decided;
+        sync();
+        renderSlider(selectedISO);
+    }
+
+    function deleteLookout(id) {
+        appData.lookouts = appData.lookouts.filter(e => e.id !== id);
+        sync();
+        renderSlider(selectedISO);
+    }
+
+    function sync() { localStorage.setItem('attendance_v6', JSON.stringify(appData)); renderCalendar(); }
+    function changeMonth(d) { curDate.setMonth(curDate.getMonth() + d); renderCalendar(); }
+    function closeSlider() { document.getElementById('eventSliderOverlay').style.display = "none"; }
+    function showAddForm() { document.getElementById('addEventModal').style.display = "flex"; }
+    function hideAddForm() { document.getElementById('addEventModal').style.display = "none"; }
+    function exportJSON() {
+        const b = new Blob([JSON.stringify(appData)], {type:'application/json'});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'eber_optimizer_v6.json'; a.click();
+    }
+    function importJSON(e) {
+        const r = new FileReader(); r.onload = x => { appData = JSON.parse(x.target.result); sync(); }; r.readAsText(e.target.files[0]);
+    }
+
+    renderCalendar();
+</script>
+</body>
+</html>
