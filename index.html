@@ -3,19 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Attendance Ledger</title>
-    <link rel="icon" type="image/png" href="/favicon.png">
+    <title>Attendance</title>
+    <link rel="icon" type="image/png" href="./favicon.png">
     <link rel="stylesheet" href="./style.css">
+    <script src="https://unpkg.com/@capacitor/core@latest/dist/capacitor.js"></script>
+    <script src="https://unpkg.com/@capacitor/filesystem@latest/dist/filesystem.js"></script>
 </head>
 <body>
 
 <div class="container no-print">
     <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-        <h2>Attendance Ledger</h2>
-        <div style="display:flex; gap:10px;">
-            <button class="btn-sec" onclick="openProfile()">Profile</button>
-            <button onclick="exportJSON()">💾 Backup</button>
-            <button class="btn-sec" onclick="document.getElementById('imp').click()">📂 Restore</button>
+        <h2 style="font-size: 1.2em; margin:0;">Attendance</h2>
+        <div style="display:flex; gap:8px;">
+            <button class="btn-sec" onclick="openProfile()">👤</button>
+            <button onclick="exportJSON()">💾</button>
+            <button class="btn-sec" onclick="document.getElementById('imp').click()">📂</button>
             <input type="file" id="imp" hidden onchange="importJSON(event)">
         </div>
     </header>
@@ -23,62 +25,65 @@
     <div class="grid">
         <section>
             <div class="card">
-                <h3 id="formTitle">Log New Event</h3>
+                <h3 id="formTitle" style="margin:0 0 10px 0;">Log Past Event</h3>
                 <input type="hidden" id="editId">
                 <input type="text" id="title" placeholder="Event Name">
                 <div style="display:flex; gap:10px;"><input type="date" id="start"><input type="date" id="end"></div>
                 <textarea id="impact" rows="2" placeholder="Impact/Achievement"></textarea>
                 <input type="file" id="photo" accept="image/*">
                 <div id="editActions" style="display:none; gap:10px;">
-                    <button onclick="saveEvent(true)" style="flex:1">Update Event</button>
+                    <button onclick="saveEvent(true)" style="flex:1">Update</button>
                     <button class="btn-sec" onclick="resetForm()">Cancel</button>
                 </div>
-                <button id="addBtn" onclick="saveEvent(false)" style="width:100%">Add Event</button>
+                <button id="addBtn" onclick="saveEvent(false)" style="width:100%">Add to History</button>
             </div>
-            <div class="card"><h3>Event History</h3><div id="eventList"></div></div>
+            
+            <div id="letter-container" style="display:none;" class="card">
+                <div id="letter-output"></div>
+                <div style="display:flex; gap:10px; margin-top:10px;">
+                    <button onclick="copyLetter()" style="flex:1">📋 Copy Letter Text</button>
+                    <button onclick="this.parentElement.parentElement.style.display='none'" class="btn-sec">Close</button>
+                </div>
+            </div>
+
+            <div id="eventList"></div>
         </section>
 
         <aside>
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                    <button class="btn-sec" onclick="changeMonth(-1)">◀</button>
+                    <button onclick="changeMonth(-1)">◀</button>
                     <strong id="monthDisplay"></strong>
-                    <button class="btn-sec" onclick="changeMonth(1)">▶</button>
+                    <button onclick="changeMonth(1)">▶</button>
                 </div>
                 <div class="cal-grid" id="calendarHeader"></div>
                 <div class="cal-grid" id="calendarBody" style="margin-top:5px;"></div>
+                <div style="margin-top:15px; font-size: 0.7em; display:flex; gap:10px;">
+                    <span>🔵 History</span> <span>🟣 Lookout</span> <span>🔴 Holiday</span>
+                </div>
             </div>
         </aside>
     </div>
 </div>
 
-<div id="profileModal">
-    <div class="modal-content">
-        <h3>User Profile Settings</h3>
-        <label>Full Name</label><input type="text" id="pName" placeholder="Eber Johns C D">
-        <label>College Name</label><input type="text" id="pCollege" placeholder="St. Thomas College">
-        <label>Department</label><input type="text" id="pDept" placeholder="B.Sc Computer Science">
-        <label>HOD Designation</label><input type="text" id="pHod" placeholder="The Head of Department">
-        <div style="margin-top:20px; display:flex; gap:10px;">
-            <button onclick="saveProfile()" style="flex:1">Save Profile</button>
-            <button class="btn-sec" onclick="closeProfile()">Close</button>
-        </div>
+<div id="eventSliderOverlay">
+    <div style="width:95%; max-width:420px; display:flex; justify-content:space-between; padding:10px;">
+        <h3 id="sliderDateTitle">Date</h3>
+        <button onclick="closeSlider()" style="background:none; color:white; font-size:28px; border:none;">✕</button>
+    </div>
+    <div class="slider-wrapper" id="sliderItems"></div>
+    <div style="width:90%; max-width:400px; margin-top:10px; display:flex; gap:10px;">
+        <button onclick="openAddLookout()" style="flex:1; background:var(--accent);">+ Schedule Event</button>
+        <button onclick="toggleHolidayFromSlider()" class="btn-sec">Toggle Holiday</button>
     </div>
 </div>
 
-<div id="letter-output">
-    <div style="text-align: right;"><span id="lDate"></span></div>
-    <br>
-    <div>To,<br><span id="outHod"></span>,<br><span id="outDept"></span>,<br><span id="outColl"></span>.</div>
-    <br>
-    <p><b>Subject: Request for Duty Leave regarding Participation in <span id="lEventName"></span>.</b></p>
-    <p>Respected Sir/Madam,</p>
-    <p>I, <b><span id="outName"></span></b>, a student of <b><span id="outDept2"></span></b>, request you to kindly grant me duty leave for the following working days due to my participation in <b>"<span id="lEventName2"></span>"</b>:</p>
-    <ul id="lDays"></ul>
-    <p>Attached is the proof of participation.</p>
-    <br><br>
-    <div>Yours faithfully,<br><b><span id="outName2"></span></b></div>
+<div id="imageViewer" onclick="this.style.display='none'">
+    <img id="viewerImg" src="">
 </div>
+
+<div id="profileModal"><div class="modal-content" id="profContent"></div></div>
+<div id="addLookoutModal"><div class="modal-content" id="lookContent"></div></div>
 
 <script src="./script.js"></script>
 </body>
