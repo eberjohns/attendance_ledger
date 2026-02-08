@@ -4,5 +4,10 @@
   "webDir": "www",
   "server": {
     "allowNavigation": ["*"]
+  },
+  "bundledWebRuntime": false,
+  "plugins": {
+    "Filesystem": {},
+    "Share": {}
   }
 }

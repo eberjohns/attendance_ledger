@@ -126,8 +126,20 @@
 <div id="addLookoutModal"><div class="modal-content" id="lookContent"></div></div>
 
 <script>
-    const { Filesystem } = Capacitor.Plugins;
-    const { Directory } = Capacitor.Plugins.Filesystem;
+    // Access Capacitor Plugins globally
+    const Filesystem = Capacitor.Plugins.Filesystem;
+    const Share = Capacitor.Plugins.Share;
+    // Define Directory enum manually if not present (for browser or hybrid environments)
+    const Directory = (Capacitor.Plugins.Filesystem && Capacitor.Plugins.Filesystem.Directory)
+        ? Capacitor.Plugins.Filesystem.Directory
+        : {
+            Documents: "DOCUMENTS",
+            Data: "DATA",
+            Cache: "CACHE",
+            External: "EXTERNAL",
+            ExternalStorage: "EXTERNAL_STORAGE",
+            Library: "LIBRARY"
+        };
     const DATA_FILE = 'attendance_data.json';
 
     let appData = { events: [], lookouts: [], overrides: {}, profile: {name:"", college:"", dept:"", hod:""} };
@@ -137,18 +149,32 @@
 
     async function sync() {
         try {
-            await Filesystem.writeFile({ path: DATA_FILE, data: JSON.stringify(appData), directory: Directory.Data, encoding: 'utf8' });
-        } catch (e) { localStorage.setItem('att_v9', JSON.stringify(appData)); }
+            await Filesystem.writeFile({
+                path: DATA_FILE,
+                data: JSON.stringify(appData),
+                directory: Directory.Data,
+                encoding: 'utf8'
+            });
+            console.log("Data synced to native storage");
+        } catch (e) {
+            console.error("Native sync failed, using localStorage fallback", e);
+            localStorage.setItem('att_v9', JSON.stringify(appData));
+        }
         renderAll();
     }
 
     async function loadData() {
         try {
-            const res = await Filesystem.readFile({ path: DATA_FILE, directory: Directory.Data, encoding: 'utf8' });
+            const res = await Filesystem.readFile({
+                path: DATA_FILE,
+                directory: Directory.Data,
+                encoding: 'utf8'
+            });
             appData = JSON.parse(res.data);
-        } catch (e) { 
+        } catch (e) {
+            console.log("No native file found, checking localStorage");
             const local = localStorage.getItem('att_v9');
-            if(local) appData = JSON.parse(local);
+            if (local) appData = JSON.parse(local);
         }
         renderAll();
     }
@@ -331,8 +357,17 @@
     }
 
     // --- UTILS ---
-    const toBase64 = file => new Promise(res => { const r = new FileReader(); r.readAsDataURL(file); r.onload = () => res(r.result); });
-    function delEv(id) { if(confirm("Delete history entry?")) { appData.events = appData.events.filter(x => x.id !== id); sync(); } }
+    const toBase64 = file => new Promise(res => { 
+        const r = new FileReader(); 
+        r.readAsDataURL(file); 
+        r.onload = () => res(r.result); 
+    });
+    function delEv(id) { 
+        if (confirm("Delete history entry?")) { 
+            appData.events = appData.events.filter(x => x.id !== id); 
+            sync(); 
+        } 
+    }
     function delLookout(id) { if(confirm("Remove?")) { appData.lookouts = appData.lookouts.filter(x => x.id !== id); sync(); renderSlider(); }}
     function resetForm() { ['title','start','end','impact','photo','editId'].forEach(i => document.getElementById(i).value=""); document.getElementById('formTitle').innerText="Log Past Event"; document.getElementById('editActions').style.display="none"; document.getElementById('addBtn').style.display="block"; }
     function changeMonth(d) { curDate.setMonth(curDate.getMonth() + d); renderCalendar(); }
@@ -369,12 +404,62 @@
         appData.profile = { name: document.getElementById('pn').value, college: document.getElementById('pc').value, dept: document.getElementById('pd').value, hod: document.getElementById('ph').value };
         sync(); document.getElementById('profileModal').style.display = "none";
     }
-    function exportJSON() {
-        const blob = new Blob([JSON.stringify(appData)], {type:'application/json'});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'attendance_backup.json'; a.click();
+
+    async function exportJSON() {
+        try {
+            // Check if Directory and Cache exist before proceeding
+            if (!Directory || !Directory.Cache) {
+                console.error("Directory.Cache is undefined. Checking structure...", Directory);
+                alert("Storage error: Plugin not fully initialized.");
+                return;
+            }
+
+            const fileName = `attendance_backup_${Date.now()}.json`;
+            
+            await Filesystem.writeFile({
+                path: fileName,
+                data: JSON.stringify(appData),
+                directory: Directory.Cache, // This is where it was failing
+                encoding: 'utf8'
+            });
+
+            const uriResult = await Filesystem.getUri({
+                directory: Directory.Cache,
+                path: fileName
+            });
+
+            if (Share) {
+                await Share.share({
+                    title: 'Attendance Backup',
+                    url: uriResult.uri,
+                    dialogTitle: 'Save your backup'
+                });
+            }
+        } catch (err) {
+            console.error("Export Error:", err);
+            alert("Export Error: " + err.message);
+        }
     }
+
+    // NATIVE IMPORT: Reads the selected file
     function importJSON(e) {
-        const r = new FileReader(); r.onload = x => { appData = JSON.parse(x.target.result); sync(); }; r.readAsText(e.target.files[0]);
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const importedData = JSON.parse(event.target.result);
+                if (importedData.events || importedData.lookouts) {
+                    appData = importedData;
+                    await sync(); // Save it to the phone permanently
+                    alert("Import successful!");
+                }
+            } catch (err) {
+                alert("Invalid JSON file.");
+            }
+        };
+        reader.readAsText(file);
     }
 
     window.onload = loadData;
