@@ -53,7 +53,7 @@
 
 <div class="container no-print">
     <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-        <h2 style="font-size: 1.2em; margin:0;">Attendance Command</h2>
+        <h2 style="font-size: 1.2em; margin:0;">Attendance</h2>
         <div style="display:flex; gap:8px;">
             <button class="btn-sec" onclick="openProfile()">👤</button>
             <button onclick="exportJSON()">💾</button>
@@ -313,7 +313,10 @@
     function renderHistory() {
         document.getElementById('eventList').innerHTML = appData.events.slice().reverse().map(e => `
             <div class="card history-card">
-                <button class="delete-btn-top" onclick="delEv(${e.id})">✕</button>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <button class="delete-btn-top" onclick="delEv(${e.id})">✕</button>
+                    <button class="btn-sec" style="margin-right:8px;" onclick="editEv(${e.id})">✎ Edit</button>
+                </div>
                 <div onclick="editEv(${e.id})">
                     <strong>${e.title}</strong><br>
                     <small>${e.start} to ${e.end}</small><br>
