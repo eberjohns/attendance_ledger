@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Events_Leaves</string>
-    <string name="title_activity_main">Events_Leaves</string>
-    <string name="package_name">com.eber.events</string>
-    <string name="custom_url_scheme">com.eber.events</string>
+    <string name="app_name">Events Logs</string>
+    <string name="title_activity_main">EventsLogs</string>
+    <string name="package_name">com.eber.eventslogs</string>
+    <string name="custom_url_scheme">com.eber.eventslogs</string>
 </resources>
